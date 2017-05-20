@@ -1,6 +1,6 @@
 ![GitHub Logo](https://github.com/gnea/gnea-Media/blob/master/Grbl%20Logo/Grbl%20Logo%20250px.png?raw=true)
 
-**This branch '4axes' proposes a fourth axis for Grbl** 
+**This branch '4axes' proposes a fourth axis for Grbl -> GrblQ** 
 
 **This axis named 'Q' will be chosen in  ['A','B','C','U','V','W']**
 
