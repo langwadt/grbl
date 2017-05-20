@@ -1,7 +1,22 @@
 ![GitHub Logo](https://github.com/gnea/gnea-Media/blob/master/Grbl%20Logo/Grbl%20Logo%20250px.png?raw=true)
+
+**This branch '4axes' proposes a fourth axis for Grbl** 
+
+**This axis named 'Q' will be chosen in  ['A','B','C','U','V','W']**
+
+First of all I would like to thank those who allowed me to start this project:
+
+- ***Chamnit***: who is the current developer of Grbl
+- **Electrokean**: who started a 6-axis project [https://github.com/electrokean/grbl/tree/6-AXIS](https://github.com/electrokean/grbl/tree/6-AXIS "6-axes")
+- ***dguerizec***: who recently started an identical job [https://github.com/dguerizec/grbl-Mega-4axis](https://github.com/dguerizec/grbl-Mega-4axis "4-axes") and made me want to take back an old version 4 axes based on Grbl 0.8
+
+
+
+
 ***
-_Click the `Release` tab to download pre-compiled `.hex` files or just [click here](https://github.com/gnea/grbl/releases)_
+For Grbl1.1 click the `Release` tab to download pre-compiled `.hex` files or just [click here](https://github.com/gnea/grbl/releases)
 ***
+
 
 Grbl is a no-compromise, high performance, low cost alternative to parallel-port-based motion control for CNC milling. This version of Grbl runs on an Arduino Mega2560 only.
 

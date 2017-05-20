@@ -67,18 +67,21 @@ void mc_line(float *target, plan_line_data_t *pl_data)
   // Plan and queue motion into planner buffer
   // uint8_t plan_status; // Not used in normal operation.
   plan_buffer_line(target, pl_data);
+///
 }
 
 
-// Execute an arc in offset mode format. position == current xyz, target == target xyz,
-// offset == offset from current xyz, axis_X defines circle plane in tool space, axis_linear is
+// Execute an arc in offset mode format. position == current xyzq, target == target xyzq,
+// offset == offset from current xyzq, axis_X defines circle plane in tool space, axis_linear is
 // the direction of helical travel, radius == circle radius, isclockwise boolean. Used
 // for vector transformation direction.
 // The arc is approximated by generating a huge number of tiny, linear segments. The chordal tolerance
 // of each segment is configured in settings.arc_tolerance, which is defined to be the maximum normal
 // distance from segment to the circle when the end points both lie on the circle.
+/// +Q : + axis_rotary
 void mc_arc(float *target, plan_line_data_t *pl_data, float *position, float *offset, float radius,
-  uint8_t axis_0, uint8_t axis_1, uint8_t axis_linear, uint8_t is_clockwise_arc)
+  uint8_t axis_0, uint8_t axis_1, uint8_t axis_linear, uint8_t axis_rotary, uint8_t is_clockwise_arc)
+///
 {
   float center_axis0 = position[axis_0] + offset[axis_0];
   float center_axis1 = position[axis_1] + offset[axis_1];
@@ -106,11 +109,11 @@ void mc_arc(float *target, plan_line_data_t *pl_data, float *position, float *of
     // Multiply inverse feed_rate to compensate for the fact that this movement is approximated
     // by a number of discrete segments. The inverse feed_rate should be correct for the sum of
     // all segments.
-    if (pl_data->condition & PL_COND_FLAG_INVERSE_TIME) { 
-      pl_data->feed_rate *= segments; 
+    if (pl_data->condition & PL_COND_FLAG_INVERSE_TIME) {
+      pl_data->feed_rate *= segments;
       bit_false(pl_data->condition,PL_COND_FLAG_INVERSE_TIME); // Force as feed absolute mode over arc segments.
     }
-    
+
     float theta_per_segment = angular_travel/segments;
     float linear_per_segment = (target[axis_linear] - position[axis_linear])/segments;
 
@@ -172,8 +175,12 @@ void mc_arc(float *target, plan_line_data_t *pl_data, float *position, float *of
       position[axis_0] = center_axis0 + r_axis0;
       position[axis_1] = center_axis1 + r_axis1;
       position[axis_linear] += linear_per_segment;
-
+/// +Q  future ...
+	#if AXIS_Q_TYPE == ROTARY
+    //  position[axis_rotary] += theta_per_segment;
+    #endif
       mc_line(position, pl_data);
+///
 
       // Bail mid-circle on system abort. Runtime command check already performed by mc_line.
       if (sys.abort) { return; }
@@ -213,7 +220,7 @@ void mc_homing_cycle(uint8_t cycle_mask)
 
   // -------------------------------------------------------------------------------------
   // Perform homing routine. NOTE: Special motion case. Only system reset works.
-  
+
   #ifdef HOMING_SINGLE_AXIS_COMMANDS
     if (cycle_mask) { limits_go_home(cycle_mask); } // Perform homing cycle based on mask.
     else
@@ -227,6 +234,11 @@ void mc_homing_cycle(uint8_t cycle_mask)
     #ifdef HOMING_CYCLE_2
       limits_go_home(HOMING_CYCLE_2);  // Homing cycle 2
     #endif
+/// +Q
+    #ifdef HOMING_CYCLE_3
+      limits_go_home(HOMING_CYCLE_3);  // Homing cycle 3
+    #endif
+///
   }
 
   protocol_execute_realtime(); // Check for reset and set system abort.
@@ -272,7 +284,6 @@ uint8_t mc_probe_cycle(float *target, plan_line_data_t *pl_data, uint8_t parser_
 
   // Setup and queue probing motion. Auto cycle-start should not start the cycle.
   mc_line(target, pl_data);
-
   // Activate the probing state monitor in the stepper module.
   sys_probe_state = PROBE_ACTIVE;
 
@@ -359,7 +370,7 @@ void mc_reset()
     // violated, by which, all bets are off.
     if ((sys.state & (STATE_CYCLE | STATE_HOMING | STATE_JOG)) ||
     		(sys.step_control & (STEP_CONTROL_EXECUTE_HOLD | STEP_CONTROL_EXECUTE_SYS_MOTION))) {
-      if (sys.state == STATE_HOMING) { 
+      if (sys.state == STATE_HOMING) {
         if (!sys_rt_exec_alarm) {system_set_exec_alarm(EXEC_ALARM_HOMING_FAIL_RESET); }
       } else { system_set_exec_alarm(EXEC_ALARM_ABORT_CYCLE); }
       st_go_idle(); // Force kill steppers. Position has likely been lost.

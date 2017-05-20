@@ -67,10 +67,10 @@ ISR(CONTROL_INT_vect)
     } else if (bit_istrue(pin,CONTROL_PIN_INDEX_CYCLE_START)) {
       bit_true(sys_rt_exec_state, EXEC_CYCLE_START);
     } else if (bit_istrue(pin,CONTROL_PIN_INDEX_FEED_HOLD)) {
-      bit_true(sys_rt_exec_state, EXEC_FEED_HOLD); 
+      bit_true(sys_rt_exec_state, EXEC_FEED_HOLD);
     } else if (bit_istrue(pin,CONTROL_PIN_INDEX_SAFETY_DOOR)) {
       bit_true(sys_rt_exec_state, EXEC_SAFETY_DOOR);
-    } 
+    }
   }
 }
 
@@ -176,6 +176,14 @@ uint8_t system_execute_line(char *line)
                 case 'X': mc_homing_cycle(HOMING_CYCLE_X); break;
                 case 'Y': mc_homing_cycle(HOMING_CYCLE_Y); break;
                 case 'Z': mc_homing_cycle(HOMING_CYCLE_Z); break;
+            /// +Q
+				#if (AXIS_Q  > 0)
+				case 'A': case 'B': case 'C':
+					mc_homing_cycle(HOMING_CYCLE_Q); break;
+				case 'U' :case 'V' :case 'W' :
+					mc_homing_cycle(HOMING_CYCLE_Q); break;
+				#endif
+            ///
                 default: return(STATUS_INVALID_STATEMENT);
               }
           #endif
@@ -283,14 +291,14 @@ float system_convert_axis_steps_to_mpos(int32_t *steps, uint8_t idx)
   float pos;
   #ifdef COREXY
     if (idx==X_AXIS) {
-      pos = (float)system_convert_corexy_to_x_axis_steps(steps) / settings.steps_per_mm[idx];
+      pos = (float)system_convert_corexy_to_x_axis_steps(steps) / settings.steps_per_unit[idx];
     } else if (idx==Y_AXIS) {
-      pos = (float)system_convert_corexy_to_y_axis_steps(steps) / settings.steps_per_mm[idx];
+      pos = (float)system_convert_corexy_to_y_axis_steps(steps) / settings.steps_per_unit[idx];
     } else {
-      pos = steps[idx]/settings.steps_per_mm[idx];
+      pos = steps[idx]/settings.steps_per_unit[idx];
     }
   #else
-    pos = steps[idx]/settings.steps_per_mm[idx];
+    pos = steps[idx]/settings.steps_per_unit[idx];
   #endif
   return(pos);
 }
@@ -302,7 +310,7 @@ void system_convert_array_steps_to_mpos(float *position, int32_t *steps)
   for (idx=0; idx<N_AXIS; idx++) {
     position[idx] = system_convert_axis_steps_to_mpos(steps, idx);
   }
-  return;
+ // return;
 }
 
 
@@ -324,18 +332,22 @@ uint8_t system_check_travel_limits(float *target)
 {
   uint8_t idx;
   for (idx=0; idx<N_AXIS; idx++) {
-    #ifdef HOMING_FORCE_SET_ORIGIN
-      // When homing forced set origin is enabled, soft limits checks need to account for directionality.
-      // NOTE: max_travel is stored as negative
-      if (bit_istrue(settings.homing_dir_mask,bit(idx))) {
-        if (target[idx] < 0 || target[idx] > -settings.max_travel[idx]) { return(true); }
-      } else {
-        if (target[idx] > 0 || target[idx] < settings.max_travel[idx]) { return(true); }
-      }
-    #else
-      // NOTE: max_travel is stored as negative
-      if (target[idx] > 0 || target[idx] < settings.max_travel[idx]) { return(true); }
-    #endif
+/// +G
+    // allow disabling soft limit per axis by setting max travel to zero
+    if (settings.max_travel[idx]) {
+		#ifdef HOMING_FORCE_SET_ORIGIN
+		  // When homing forced set origin is enabled, soft limits checks need to account for directionality.
+		  // NOTE: max_travel is stored as negative
+		  if (bit_istrue(settings.homing_dir_mask,bit(idx))) {
+			if (target[idx] < 0 || target[idx] > -settings.max_travel[idx]) { return(true); }
+		  } else {
+			if (target[idx] > 0 || target[idx] < settings.max_travel[idx]) { return(true); }
+		  }
+		#else
+		  // NOTE: max_travel is stored as negative
+		  if (target[idx] > 0 || target[idx] < settings.max_travel[idx]) { return(true); }
+		#endif
+	}
   }
   return(false);
 }

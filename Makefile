@@ -3,18 +3,18 @@
 #  Copyright (c) 2009-2011 Simen Svale Skogsrud
 #  Copyright (c) 2012-2015 Sungeun K. Jeon
 #
-#  Grbl is free software: you can redistribute it and/or modify
+#  grbl is free software: you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
 #  the Free Software Foundation, either version 3 of the License, or
 #  (at your option) any later version.
 #
-#  Grbl is distributed in the hope that it will be useful,
+#  grbl is distributed in the hope that it will be useful,
 #  but WITHOUT ANY WARRANTY; without even the implied warranty of
 #  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #  GNU General Public License for more details.
 #
 #  You should have received a copy of the GNU General Public License
-#  along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
+#  along with grbl.  If not, see <http://www.gnu.org/licenses/>.
 
 
 # This is a prototype Makefile. Modify it according to your needs.
@@ -30,10 +30,26 @@
 
 DEVICE     ?= atmega2560
 CLOCK      = 16000000L
-PROGRAMMER ?= -c avrisp2 -P usb
-SOURCE    = main.c motion_control.c gcode.c spindle_control.c coolant_control.c serial.c \
-             protocol.c stepper.c eeprom.c settings.c planner.c nuts_bolts.c limits.c \
-             print.c probe.c report.c system.c sleep.c jog.c
+PROGRAMMER ?= -c wiring -P usb
+SOURCE    = coolant_control.c \
+			eeprom.c \
+			gcode.c \
+			jog.c \
+			limits.c \
+			main.c  \
+			motion_control.c  \
+			nuts_bolts.c \
+			planner.c \
+			print.c \
+			probe.c \
+            protocol.c \
+            report.c \
+            serial.c \
+            settings.c \
+            sleep.c  \
+            spindle_control.c \
+            stepper.c  \
+            system.c
 BUILDDIR = build
 SOURCEDIR = grbl
 # FUSES      = -U hfuse:w:0xd9:m -U lfuse:w:0x24:m
@@ -46,7 +62,7 @@ AVRDUDE = avrdude $(PROGRAMMER) -p $(DEVICE) -B 10 -F
 # Compile flags for avr-gcc v4.8.1. Does not produce -flto warnings.
 # COMPILE = avr-gcc -Wall -Os -DF_CPU=$(CLOCK) -mmcu=$(DEVICE) -I. -ffunction-sections
 
-# Compile flags for avr-gcc v4.9.2 compatible with the IDE. Or if you don't care about the warnings. 
+# Compile flags for avr-gcc v4.9.2 compatible with the IDE. Or if you don't care about the warnings.
 COMPILE = avr-gcc -Wall -Os -DF_CPU=$(CLOCK) -mmcu=$(DEVICE) -I. -ffunction-sections -flto
 
 
@@ -59,7 +75,7 @@ $(BUILDDIR)/%.o: $(SOURCEDIR)/%.c
 	$(COMPILE) -MMD -MP -c $< -o $@
 
 .S.o:
-	$(COMPILE) -x assembler-with-cpp -c $< -o $(BUILDDIR)/$@ 
+	$(COMPILE) -x assembler-with-cpp -c $< -o $(BUILDDIR)/$@
 # "-x assembler-with-cpp" should not be necessary since this is the default
 # file type for the .S (with capital S) extension. However, upper case
 # characters are not always preserved on Windows. To ensure WinAVR
@@ -89,7 +105,7 @@ $(BUILDDIR)/main.elf: $(OBJECTS)
 	$(COMPILE) -o $(BUILDDIR)/main.elf $(OBJECTS) -lm -Wl,--gc-sections
 
 grbl.hex: $(BUILDDIR)/main.elf
-	rm -f grbl.hex
+	rm -f grblQ.hex
 	avr-objcopy -j .text -j .data -O ihex $(BUILDDIR)/main.elf grbl.hex
 	avr-size --format=berkeley $(BUILDDIR)/main.elf
 # If you have an EEPROM section, you must also create a hex file for the

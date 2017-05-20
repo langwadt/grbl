@@ -56,10 +56,12 @@
 #endif
 
 // Define EEPROM memory address location values for Grbl settings and parameters
+/// +Q : adress modified
 #define EEPROM_ADDR_GLOBAL         1U
-#define EEPROM_ADDR_PARAMETERS     512U
-#define EEPROM_ADDR_STARTUP_BLOCK  768U
-#define EEPROM_ADDR_BUILD_INFO     942U
+#define EEPROM_ADDR_PARAMETERS     1024U 	//512U
+#define EEPROM_ADDR_STARTUP_BLOCK  1536U	//768U
+#define EEPROM_ADDR_BUILD_INFO     2048U	//942U
+///
 
 // Define EEPROM address indexing for coordinate parameters
 #define N_COORDINATE_SYSTEM 6  // Number of supported work coordinate systems (from index 1)
@@ -77,7 +79,8 @@
 // Global persistent settings (Stored from byte EEPROM_ADDR_GLOBAL onwards)
 typedef struct {
   // Axis settings
-  float steps_per_mm[N_AXIS];
+/// +Q :  steps_per_mm -> steps_per_unit
+  float steps_per_unit[N_AXIS];
   float max_rate[N_AXIS];
   float acceleration[N_AXIS];
   float max_travel[N_AXIS];
@@ -90,10 +93,10 @@ typedef struct {
   uint8_t status_report_mask; // Mask to indicate desired report data.
   float junction_deviation;
   float arc_tolerance;
-  
+
   float rpm_max;
   float rpm_min;
-  
+
   uint8_t flags;  // Contains default boolean settings
 
   uint8_t homing_dir_mask;

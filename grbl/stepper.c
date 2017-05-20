@@ -87,7 +87,13 @@ typedef struct {
   // Used by the bresenham line algorithm
   uint32_t counter_x,        // Counter variables for the bresenham line tracer
            counter_y,
-           counter_z;
+           counter_z
+/// +Q
+		#ifdef AXIS_Q_EXIST
+          , counter_q
+		#endif
+///
+			;
   #ifdef STEP_PULSE_DELAY
     uint8_t step_bits;  // Stores out_bits output to complete the step pulse delay
   #endif
@@ -152,7 +158,7 @@ typedef struct {
   float decelerate_after; // Deceleration ramp start measured from end of block (mm)
 
   float inv_rate;    // Used by PWM laser mode to speed up segment calculations.
-  uint16_t current_spindle_pwm; 
+  uint16_t current_spindle_pwm;
 } st_prep_t;
 static st_prep_t prep;
 
@@ -339,6 +345,11 @@ ISR(TIMER1_COMPA_vect)
 
         // Initialize Bresenham line and distance counters
         st.counter_x = st.counter_y = st.counter_z = (st.exec_block->step_event_count >> 1);
+/// +Q
+		#ifdef AXIS_Q_EXIST
+		  st.counter_q = st.counter_z ;
+		#endif
+///
       }
       st.dir_outbits = st.exec_block->direction_bits ^ dir_port_invert_mask;
 
@@ -347,8 +358,12 @@ ISR(TIMER1_COMPA_vect)
         st.steps[X_AXIS] = st.exec_block->steps[X_AXIS] >> st.exec_segment->amass_level;
         st.steps[Y_AXIS] = st.exec_block->steps[Y_AXIS] >> st.exec_segment->amass_level;
         st.steps[Z_AXIS] = st.exec_block->steps[Z_AXIS] >> st.exec_segment->amass_level;
+/// +Q
+		#ifdef AXIS_Q_EXIST
+		  st.steps[Q_AXIS] = st.exec_block->steps[Q_AXIS] >> st.exec_segment->amass_level;
+		#endif
       #endif
-
+///
       // Set real-time spindle output as segment is loaded, just prior to the first step.
       spindle_set_speed(st.exec_segment->spindle_pwm);
 
@@ -403,7 +418,20 @@ ISR(TIMER1_COMPA_vect)
     if (st.exec_block->direction_bits & (1<<Z_DIRECTION_BIT)) { sys_position[Z_AXIS]--; }
     else { sys_position[Z_AXIS]++; }
   }
-
+/// +Q
+#ifdef AXIS_Q_EXIST
+  #ifdef ADAPTIVE_MULTI_AXIS_STEP_SMOOTHING
+    st.counter_q += st.steps[Q_AXIS];
+  #else
+    st.counter_q += st.exec_block->steps[Q_AXIS];
+  #endif
+  if (st.counter_q > st.exec_block->step_event_count) {
+    st.step_outbits |= (1<<Q_STEP_BIT);
+    st.counter_q -= st.exec_block->step_event_count;
+    if (st.exec_block->direction_bits & (1<<Q_DIRECTION_BIT)) { sys_position[Q_AXIS]--; }
+    else { sys_position[Q_AXIS]++; }    }
+#endif
+///
   // During a homing cycle, lock out and prevent desired axes from moving.
   if (sys.state == STATE_HOMING) { st.step_outbits &= sys.homing_axis_lock; }
 
@@ -646,15 +674,15 @@ void st_prep_buffer()
         } else {
           prep.current_speed = sqrt(pl_block->entry_speed_sqr);
         }
-        
+
         // Setup laser mode variables. PWM rate adjusted motions will always complete a motion with the
-        // spindle off. 
+        // spindle off.
         st_prep_block->is_pwm_rate_adjusted = false;
         if (settings.flags & BITFLAG_LASER_MODE) {
-          if (pl_block->condition & PL_COND_FLAG_SPINDLE_CCW) { 
+          if (pl_block->condition & PL_COND_FLAG_SPINDLE_CCW) {
             // Pre-compute inverse programmed rate to speed up PWM updating per step segment.
             prep.inv_rate = 1.0/pl_block->programmed_rate;
-            st_prep_block->is_pwm_rate_adjusted = true; 
+            st_prep_block->is_pwm_rate_adjusted = true;
           }
         }
       }
@@ -695,9 +723,9 @@ void st_prep_buffer()
         }
 
         nominal_speed = plan_compute_profile_nominal_speed(pl_block);
-				float nominal_speed_sqr = nominal_speed*nominal_speed;
-				float intersect_distance =
-								0.5*(pl_block->millimeters+inv_2_accel*(pl_block->entry_speed_sqr-exit_speed_sqr));
+		float nominal_speed_sqr = nominal_speed*nominal_speed;
+		float intersect_distance =
+			0.5*(pl_block->millimeters+inv_2_accel*(pl_block->entry_speed_sqr-exit_speed_sqr));
 
         if (pl_block->entry_speed_sqr > nominal_speed_sqr) { // Only occurs during override reductions.
           prep.accelerate_until = pl_block->millimeters - inv_2_accel*(pl_block->entry_speed_sqr-nominal_speed_sqr);
@@ -749,10 +777,10 @@ void st_prep_buffer()
 					prep.maximum_speed = prep.exit_speed;
 				}
 			}
-      
+
       bit_true(sys.step_control, STEP_CONTROL_UPDATE_SPINDLE_PWM); // Force update whenever updating block.
     }
-    
+
     // Initialize new segment
     segment_t *prep_segment = &segment_buffer[segment_buffer_head];
 
@@ -862,16 +890,16 @@ void st_prep_buffer()
     /* -----------------------------------------------------------------------------------
       Compute spindle speed PWM output for step segment
     */
-    
+
     if (st_prep_block->is_pwm_rate_adjusted || (sys.step_control & STEP_CONTROL_UPDATE_SPINDLE_PWM)) {
       if (pl_block->condition & (PL_COND_FLAG_SPINDLE_CW | PL_COND_FLAG_SPINDLE_CCW)) {
         float rpm = pl_block->spindle_speed;
-        // NOTE: Feed and rapid overrides are independent of PWM value and do not alter laser power/rate.        
+        // NOTE: Feed and rapid overrides are independent of PWM value and do not alter laser power/rate.
         if (st_prep_block->is_pwm_rate_adjusted) { rpm *= (prep.current_speed * prep.inv_rate); }
         // If current_speed is zero, then may need to be rpm_min*(100/MAX_SPINDLE_SPEED_OVERRIDE)
         // but this would be instantaneous only and during a motion. May not matter at all.
         prep.current_spindle_pwm = spindle_compute_pwm_value(rpm);
-      } else { 
+      } else {
         sys.spindle_speed = 0.0;
         prep.current_spindle_pwm = SPINDLE_PWM_OFF_VALUE;
       }
@@ -879,7 +907,7 @@ void st_prep_buffer()
     }
     prep_segment->spindle_pwm = prep.current_spindle_pwm; // Reload segment PWM value
 
-    
+
     /* -----------------------------------------------------------------------------------
        Compute segment step rate, steps to execute, and apply necessary rate corrections.
        NOTE: Steps are computed by direct scalar conversion of the millimeter distance

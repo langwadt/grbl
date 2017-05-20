@@ -166,8 +166,8 @@ float convert_delta_vector_to_unit_vector(float *vector)
   uint8_t idx;
   float magnitude = 0.0;
   for (idx=0; idx<N_AXIS; idx++) {
-    if (vector[idx] != 0.0) {
-      magnitude += vector[idx]*vector[idx];
+	if (vector[idx] != 0.0) {
+		magnitude += vector[idx]*vector[idx];
     }
   }
   magnitude = sqrt(magnitude);

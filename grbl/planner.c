@@ -323,54 +323,56 @@ uint8_t plan_buffer_line(float *target, plan_line_data_t *pl_data)
 
   // Compute and store initial move distance data.
   int32_t target_steps[N_AXIS], position_steps[N_AXIS];
-  float unit_vec[N_AXIS], delta_mm;
+/// +Q :  delta_mm -> delta_unit
+  float unit_vec[N_AXIS], delta_unit;
   uint8_t idx;
 
   // Copy position data based on type of motion being planned.
-  if (block->condition & PL_COND_FLAG_SYSTEM_MOTION) { 
+  if (block->condition & PL_COND_FLAG_SYSTEM_MOTION) {
     #ifdef COREXY
       position_steps[X_AXIS] = system_convert_corexy_to_x_axis_steps(sys_position);
       position_steps[Y_AXIS] = system_convert_corexy_to_y_axis_steps(sys_position);
       position_steps[Z_AXIS] = sys_position[Z_AXIS];
     #else
-      memcpy(position_steps, sys_position, sizeof(sys_position)); 
+      memcpy(position_steps, sys_position, sizeof(sys_position));
     #endif
   } else { memcpy(position_steps, pl.position, sizeof(pl.position)); }
 
   #ifdef COREXY
-    target_steps[A_MOTOR] = lround(target[A_MOTOR]*settings.steps_per_mm[A_MOTOR]);
-    target_steps[B_MOTOR] = lround(target[B_MOTOR]*settings.steps_per_mm[B_MOTOR]);
+    target_steps[A_MOTOR] = lround(target[A_MOTOR]*settings.steps_per_unit[A_MOTOR]);
+    target_steps[B_MOTOR] = lround(target[B_MOTOR]*settings.steps_per_unit[B_MOTOR]);
     block->steps[A_MOTOR] = labs((target_steps[X_AXIS]-position_steps[X_AXIS]) + (target_steps[Y_AXIS]-position_steps[Y_AXIS]));
     block->steps[B_MOTOR] = labs((target_steps[X_AXIS]-position_steps[X_AXIS]) - (target_steps[Y_AXIS]-position_steps[Y_AXIS]));
   #endif
-
   for (idx=0; idx<N_AXIS; idx++) {
     // Calculate target position in absolute steps, number of steps for each axis, and determine max step events.
     // Also, compute individual axes distance for move and prep unit vector calculations.
     // NOTE: Computes true distance from converted step values.
     #ifdef COREXY
       if ( !(idx == A_MOTOR) && !(idx == B_MOTOR) ) {
-        target_steps[idx] = lround(target[idx]*settings.steps_per_mm[idx]);
+        target_steps[idx] = lround(target[idx]*settings.steps_per_unit[idx]);
         block->steps[idx] = labs(target_steps[idx]-position_steps[idx]);
       }
       block->step_event_count = max(block->step_event_count, block->steps[idx]);
       if (idx == A_MOTOR) {
-        delta_mm = (target_steps[X_AXIS]-position_steps[X_AXIS] + target_steps[Y_AXIS]-position_steps[Y_AXIS])/settings.steps_per_mm[idx];
+        delta_unit = (target_steps[X_AXIS]-position_steps[X_AXIS] + target_steps[Y_AXIS]-position_steps[Y_AXIS])/settings.steps_per_unit[idx];
       } else if (idx == B_MOTOR) {
-        delta_mm = (target_steps[X_AXIS]-position_steps[X_AXIS] - target_steps[Y_AXIS]+position_steps[Y_AXIS])/settings.steps_per_mm[idx];
+        delta_unit = (target_steps[X_AXIS]-position_steps[X_AXIS] - target_steps[Y_AXIS]+position_steps[Y_AXIS])/settings.steps_per_unit[idx];
       } else {
-        delta_mm = (target_steps[idx] - position_steps[idx])/settings.steps_per_mm[idx];
+        delta_unit = (target_steps[idx] - position_steps[idx])/settings.steps_per_unit[idx];
       }
     #else
-      target_steps[idx] = lround(target[idx]*settings.steps_per_mm[idx]);
-      block->steps[idx] = labs(target_steps[idx]-position_steps[idx]);
-      block->step_event_count = max(block->step_event_count, block->steps[idx]);
-      delta_mm = (target_steps[idx] - position_steps[idx])/settings.steps_per_mm[idx];
-	  #endif
-    unit_vec[idx] = delta_mm; // Store unit vector numerator
+		target_steps[idx] = lround(target[idx]*settings.steps_per_unit[idx]);
+		block->steps[idx] = labs(target_steps[idx]-position_steps[idx]);
+		block->step_event_count = max(block->step_event_count, block->steps[idx]);
+		delta_unit = (target_steps[idx] - position_steps[idx])/settings.steps_per_unit[idx];
+	// delta in unit = mm or degrees
+	//	delta_unit = target[idx] - position_steps[idx]/settings.steps_per_unit[idx];
+	#endif
+    unit_vec[idx] = delta_unit; // Store unit vector numerator
 
     // Set direction bits. Bit enabled always means direction is negative.
-    if (delta_mm < 0.0 ) { block->direction_bits |= get_direction_pin_mask(idx); }
+    if (delta_unit < 0.0 ) { block->direction_bits |= get_direction_pin_mask(idx); }
   }
 
   // Bail if this is a zero-length block. Highly unlikely to occur.
@@ -386,7 +388,7 @@ uint8_t plan_buffer_line(float *target, plan_line_data_t *pl_data)
 
   // Store programmed rate.
   if (block->condition & PL_COND_FLAG_RAPID_MOTION) { block->programmed_rate = block->rapid_rate; }
-  else { 
+  else {
     block->programmed_rate = pl_data->feed_rate;
     if (block->condition & PL_COND_FLAG_INVERSE_TIME) { block->programmed_rate *= block->millimeters; }
   }

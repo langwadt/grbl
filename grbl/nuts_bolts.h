@@ -21,19 +21,27 @@
 
 #ifndef nuts_bolts_h
 #define nuts_bolts_h
-
-#define false 0
-#define true 1
+/// +Q
+//#define false 0
+//#define true 1
 
 #define SOME_LARGE_VALUE 1.0E+38
-
+/// +Q
+#include "defaults.h"   // AXIS_Q_EXIST
+///
 // Axis array index values. Must start with 0 and be continuous.
-#define N_AXIS 3 // Number of axes
 #define X_AXIS 0 // Axis indexing value.
 #define Y_AXIS 1
 #define Z_AXIS 2
-// #define A_AXIS 3
-
+/// +Q  : fourth axis  in [A,B,C,U,V,W]
+#define N_AXIS_XYZ	3   // for conversion mm <-> inches
+#ifndef AXIS_Q_EXIST
+	#define N_AXIS 3 // Number of axes
+#else
+	#define N_AXIS 4 // Number of axes
+	#define Q_AXIS 3
+#endif
+///
 // CoreXY motor assignments. DO NOT ALTER.
 // NOTE: If the A and B motor axis bindings are changed, this effects the CoreXY equations.
 #ifdef COREXY

@@ -39,7 +39,16 @@ static void report_util_gcode_modes_M() { printPgmString(PSTR(" M")); }
 static void report_util_axis_values(float *axis_value) {
   uint8_t idx;
   for (idx=0; idx<N_AXIS; idx++) {
-    printFloat_CoordValue(axis_value[idx]);
+/// +Q
+#if AXIS_Q_TYPE  == LINEAR
+	printFloat_CoordValue(axis_value[idx], LINEAR);
+#else
+	if (idx < N_AXIS_XYZ)
+		printFloat_CoordValue(axis_value[idx], LINEAR);
+	else
+		printFloat_CoordValue(axis_value[idx], ROTARY);
+#endif
+///
     if (idx < (N_AXIS-1)) { serial_write(','); }
   }
 }
@@ -50,7 +59,7 @@ static void report_util_setting_string(uint8_t n) {
   serial_write('(');
   switch(n) {
     case 0: printPgmString(PSTR("stp pulse")); break;
-    case 1: printPgmString(PSTR("idl delay")); break; 
+    case 1: printPgmString(PSTR("idl delay")); break;
     case 2: printPgmString(PSTR("stp inv")); break;
     case 3: printPgmString(PSTR("dir inv")); break;
     case 4: printPgmString(PSTR("stp en inv")); break;
@@ -91,13 +100,13 @@ static void report_util_setting_string(uint8_t n) {
 }
 */
 
-static void report_util_uint8_setting(uint8_t n, int val) { 
-  report_util_setting_prefix(n); 
-  print_uint8_base10(val); 
-  report_util_line_feed(); // report_util_setting_string(n); 
+static void report_util_uint8_setting(uint8_t n, int val) {
+  report_util_setting_prefix(n);
+  print_uint8_base10(val);
+  report_util_line_feed(); // report_util_setting_string(n);
 }
-static void report_util_float_setting(uint8_t n, float val, uint8_t n_decimal) { 
-  report_util_setting_prefix(n); 
+static void report_util_float_setting(uint8_t n, float val, uint8_t n_decimal) {
+  report_util_setting_prefix(n);
   printFloat(val,n_decimal);
   report_util_line_feed(); // report_util_setting_string(n);
 }
@@ -174,7 +183,7 @@ void report_init_message()
 
 // Grbl help message
 void report_grbl_help() {
-  printPgmString(PSTR("[HLP:$$ $# $G $I $N $x=val $Nx=line $J=line $SLP $C $X $H ~ ! ? ctrl-x]\r\n"));    
+  printPgmString(PSTR("[HLP:$$ $# $G $I $N $x=val $Nx=line $J=line $SLP $C $X $H ~ ! ? ctrl-x]\r\n"));
 }
 
 
@@ -210,7 +219,8 @@ void report_grbl_settings() {
   for (set_idx=0; set_idx<AXIS_N_SETTINGS; set_idx++) {
     for (idx=0; idx<N_AXIS; idx++) {
       switch (set_idx) {
-        case 0: report_util_float_setting(val+idx,settings.steps_per_mm[idx],N_DECIMAL_SETTINGVALUE); break;
+/// +Q  : steps_per_mm -> steps_per_unit
+        case 0: report_util_float_setting(val+idx,settings.steps_per_unit[idx],N_DECIMAL_SETTINGVALUE); break;
         case 1: report_util_float_setting(val+idx,settings.max_rate[idx],N_DECIMAL_SETTINGVALUE); break;
         case 2: report_util_float_setting(val+idx,settings.acceleration[idx]/(60*60),N_DECIMAL_SETTINGVALUE); break;
         case 3: report_util_float_setting(val+idx,-settings.max_travel[idx],N_DECIMAL_SETTINGVALUE); break;
@@ -261,7 +271,9 @@ void report_ngc_parameters()
   report_util_axis_values(gc_state.coord_offset);
   report_util_feedback_line_feed();
   printPgmString(PSTR("[TLO:")); // Print tool length offset value
-  printFloat_CoordValue(gc_state.tool_length_offset);
+/// +Q
+  printFloat_CoordValue(gc_state.tool_length_offset, LINEAR);
+///
   report_util_feedback_line_feed();
   report_probe_parameters(); // Print probe parameters. Not persistent in memory.
 }
@@ -298,8 +310,8 @@ void report_gcode_modes()
     switch (gc_state.modal.program_flow) {
       case PROGRAM_FLOW_PAUSED : serial_write('0'); break;
       // case PROGRAM_FLOW_OPTIONAL_STOP : serial_write('1'); break; // M1 is ignored and not supported.
-      case PROGRAM_FLOW_COMPLETED_M2 : 
-      case PROGRAM_FLOW_COMPLETED_M30 : 
+      case PROGRAM_FLOW_COMPLETED_M2 :
+      case PROGRAM_FLOW_COMPLETED_M30 :
         print_uint8_base10(gc_state.modal.program_flow);
         break;
     }
@@ -317,13 +329,20 @@ void report_gcode_modes()
     if (gc_state.modal.coolant & PL_COND_FLAG_COOLANT_MIST) { serial_write('7'); }
     if (gc_state.modal.coolant & PL_COND_FLAG_COOLANT_FLOOD) { serial_write('8'); }
   } else { serial_write('9'); }
+ #ifdef ENABLE_PARKING_OVERRIDE_CONTROL
+    if (sys.override_ctrl == OVERRIDE_PARKING_MOTION) {
+      report_util_gcode_modes_M();
+      print_uint8_base10(56);
+    }
+  #endif
 
   printPgmString(PSTR(" T"));
   print_uint8_base10(gc_state.tool);
 
   printPgmString(PSTR(" F"));
-  printFloat_RateValue(gc_state.feed_rate);
-
+/// +Q
+  printFloat_RateValue(gc_state.feed_rate, LINEAR);
+///
   printPgmString(PSTR(" S"));
   printFloat(gc_state.spindle_speed,N_DECIMAL_RPMVALUE);
 
@@ -376,6 +395,15 @@ void report_build_info(char *line)
   #ifdef ALLOW_FEED_OVERRIDE_DURING_PROBE_CYCLES
     serial_write('A');
   #endif
+ #ifdef SPINDLE_ENABLE_OFF_WITH_ZERO_SPEED
+    serial_write('0');
+  #endif
+  #ifdef ENABLE_SOFTWARE_DEBOUNCE
+    serial_write('S');
+  #endif
+  #ifdef ENABLE_PARKING_OVERRIDE_CONTROL
+    serial_write('R');
+  #endif
   #ifndef ENABLE_RESTORE_EEPROM_WIPE_ALL // NOTE: Shown when disabled.
     serial_write('*');
   #endif
@@ -394,9 +422,21 @@ void report_build_info(char *line)
   #ifndef FORCE_BUFFER_SYNC_DURING_WCO_CHANGE // NOTE: Shown when disabled.
     serial_write('W');
   #endif
+/// +Q
+ #ifdef HOMING_INIT_LOCK
+    serial_write('L');
+ #endif
+ #ifdef AXIS_Q
+	#if (AXIS_Q == 0)
+		serial_write('0');
+	#else
+		print_uint8_base10(AXIS_Q);
+	#endif
+ #endif
+///
   // NOTE: Compiled values, like override increments/max/min values, may be added at some point later.
-  // These will likely have a comma delimiter to separate them.   
-    
+  // These will likely have a comma delimiter to separate them.
+
   report_util_feedback_line_feed();
 }
 
@@ -417,126 +457,162 @@ void report_echo_line_received(char *line)
  // especially during g-code programs with fast, short line segments and high frequency reports (5-20Hz).
 void report_realtime_status()
 {
-  uint8_t idx;
-  int32_t current_position[N_AXIS]; // Copy current state of the system position variable
-  memcpy(current_position,sys_position,sizeof(sys_position));
-  float print_position[N_AXIS];
-  system_convert_array_steps_to_mpos(print_position,current_position);
+	uint8_t idx;
+	int32_t current_position[N_AXIS]; // Copy current state of the system position variable
+	memcpy(current_position,sys_position,sizeof(sys_position));
+	float print_position[N_AXIS];
+	system_convert_array_steps_to_mpos(print_position,current_position);
 
-  // Report current machine state and sub-states
-  serial_write('<');
-  switch (sys.state) {
-    case STATE_IDLE: printPgmString(PSTR("Idle")); break;
-    case STATE_CYCLE: printPgmString(PSTR("Run")); break;
-    case STATE_HOLD:
-      if (!(sys.suspend & SUSPEND_JOG_CANCEL)) {
-        printPgmString(PSTR("Hold:"));
-        if (sys.suspend & SUSPEND_HOLD_COMPLETE) { serial_write('0'); } // Ready to resume
-        else { serial_write('1'); } // Actively holding
-        break;
-      } // Continues to print jog state during jog cancel.
-    case STATE_JOG: printPgmString(PSTR("Jog")); break;
-    case STATE_HOMING: printPgmString(PSTR("Home")); break;
-    case STATE_ALARM: printPgmString(PSTR("Alarm")); break;
-    case STATE_CHECK_MODE: printPgmString(PSTR("Check")); break;
-    case STATE_SAFETY_DOOR:
-      printPgmString(PSTR("Door:"));
-      if (sys.suspend & SUSPEND_INITIATE_RESTORE) {
-        serial_write('3'); // Restoring
-      } else {
-        if (sys.suspend & SUSPEND_RETRACT_COMPLETE) {
-          if (sys.suspend & SUSPEND_SAFETY_DOOR_AJAR) {
-            serial_write('1'); // Door ajar
-          } else {
-            serial_write('0');
-          } // Door closed and ready to resume
-        } else {
-          serial_write('2'); // Retracting
-        }
-      }
-      break;
-    case STATE_SLEEP: printPgmString(PSTR("Sleep")); break;
-  }
+	// Report current machine state and sub-states
+	serial_write('<');
+	switch (sys.state) {
+		case STATE_IDLE: printPgmString(PSTR("Idle"));
+			break;
+		case STATE_CYCLE: printPgmString(PSTR("Run"));
+			break;
+		case STATE_HOLD:
+			if (!(sys.suspend & SUSPEND_JOG_CANCEL)) {
+				printPgmString(PSTR("Hold:"));
+				if (sys.suspend & SUSPEND_HOLD_COMPLETE)
+					{ serial_write('0'); } // Ready to resume
+				else
+					{ serial_write('1'); } // Actively holding
+			//break;  // ??
+			}
+			break;
+		// Continues to print jog state during jog cancel.
+		case STATE_JOG: printPgmString(PSTR("Jog"));
+			break;
+		case STATE_HOMING: printPgmString(PSTR("Home"));
+			break;
+		case STATE_ALARM: printPgmString(PSTR("Alarm"));
+			break;
+		case STATE_CHECK_MODE: printPgmString(PSTR("Check"));
+			break;
+		case STATE_SAFETY_DOOR:
+			printPgmString(PSTR("Door:"));
+			if (sys.suspend & SUSPEND_INITIATE_RESTORE) {
+				serial_write('3'); // Restoring
+			} else {
+				if (sys.suspend & SUSPEND_RETRACT_COMPLETE) {
+					if (sys.suspend & SUSPEND_SAFETY_DOOR_AJAR) {
+						serial_write('1'); // Door ajar
+					} else {
+						serial_write('0');
+					} // Door closed and ready to resume
+				} else {
+					serial_write('2'); // Retracting
+				}
+			}
+			break;
+		case STATE_SLEEP: printPgmString(PSTR("Sleep"));
+			break;
+	}
 
-  float wco[N_AXIS];
-  if (bit_isfalse(settings.status_report_mask,BITFLAG_RT_STATUS_POSITION_TYPE) ||
-      (sys.report_wco_counter == 0) ) {
-    for (idx=0; idx< N_AXIS; idx++) {
-      // Apply work coordinate offsets and tool length offset to current position.
-      wco[idx] = gc_state.coord_system[idx]+gc_state.coord_offset[idx];
-      if (idx == TOOL_LENGTH_OFFSET_AXIS) { wco[idx] += gc_state.tool_length_offset; }
-      if (bit_isfalse(settings.status_report_mask,BITFLAG_RT_STATUS_POSITION_TYPE)) {
-        print_position[idx] -= wco[idx];
-      }
-    }
-  }
+	float wco[N_AXIS];
+	if (bit_isfalse(settings.status_report_mask,BITFLAG_RT_STATUS_POSITION_TYPE) ||
+		(sys.report_wco_counter == 0) ) {
+		for (idx=0; idx< N_AXIS; idx++) {
+			// Apply work coordinate offsets and tool length offset to current position.
+			wco[idx] = gc_state.coord_system[idx]+gc_state.coord_offset[idx];
+			if (idx == TOOL_LENGTH_OFFSET_AXIS)
+				{ wco[idx] += gc_state.tool_length_offset; }
+			if (bit_isfalse(settings.status_report_mask,BITFLAG_RT_STATUS_POSITION_TYPE)) {
+				print_position[idx] -= wco[idx];
+			}
+		}
+	}
 
-  // Report machine position
-  if (bit_istrue(settings.status_report_mask,BITFLAG_RT_STATUS_POSITION_TYPE)) {
-    printPgmString(PSTR("|MPos:"));
-  } else {
-    printPgmString(PSTR("|WPos:"));
-  }
-  report_util_axis_values(print_position);
+	// Report machine position
+	if (bit_istrue(settings.status_report_mask,BITFLAG_RT_STATUS_POSITION_TYPE)) {
+		printPgmString(PSTR("|MPos:"));
+	} else {
+		printPgmString(PSTR("|WPos:"));
+	}
+	report_util_axis_values(print_position);
 
-  // Returns planner and serial read buffer states.
-  #ifdef REPORT_FIELD_BUFFER_STATE
-    if (bit_istrue(settings.status_report_mask,BITFLAG_RT_STATUS_BUFFER_STATE)) {
-      printPgmString(PSTR("|Bf:"));
-      print_uint8_base10(plan_get_block_buffer_available());
-      serial_write(',');
-      print_uint8_base10(serial_get_rx_buffer_available());
-    }
-  #endif
+	// Returns planner and serial read buffer states.
+	#ifdef REPORT_FIELD_BUFFER_STATE
+		if (bit_istrue(settings.status_report_mask,BITFLAG_RT_STATUS_BUFFER_STATE)) {
+			printPgmString(PSTR("|Bf:"));
+			print_uint8_base10(plan_get_block_buffer_available());
+			serial_write(',');
+			print_uint8_base10(serial_get_rx_buffer_available());
+		}
+	#endif
 
-  #ifdef REPORT_FIELD_LINE_NUMBERS
-    // Report current line number
-    plan_block_t * cur_block = plan_get_current_block();
-    if (cur_block != NULL) {
-      uint32_t ln = cur_block->line_number;
-      if (ln > 0) {
-        printPgmString(PSTR("|Ln:"));
-        printInteger(ln);
-      }
-    }
-  #endif
+	#ifdef REPORT_FIELD_LINE_NUMBERS
+		// Report current line number
+		plan_block_t * cur_block = plan_get_current_block();
+		if (cur_block != NULL) {
+			uint32_t ln = cur_block->line_number;
+			if (ln > 0) {
+				printPgmString(PSTR("|Ln:"));
+				printInteger(ln);
+			}
+		}
+	#endif
 
-  // Report realtime feed speed
-  #ifdef REPORT_FIELD_CURRENT_FEED_SPEED
-    printPgmString(PSTR("|FS:"));
-    printFloat_RateValue(st_get_realtime_rate());
-    serial_write(',');
-    printFloat(sys.spindle_speed,N_DECIMAL_RPMVALUE);
-  #endif
 
-  #ifdef REPORT_FIELD_PIN_STATE
-    uint8_t lim_pin_state = limits_get_state();
-    uint8_t ctrl_pin_state = system_control_get_state();
-    uint8_t prb_pin_state = probe_get_state();
-    if (lim_pin_state | ctrl_pin_state | prb_pin_state) {
-      printPgmString(PSTR("|Pn:"));
-      if (prb_pin_state) { serial_write('P'); }
-      if (lim_pin_state) {
-        if (bit_istrue(lim_pin_state,bit(X_AXIS))) { serial_write('X'); }
-        if (bit_istrue(lim_pin_state,bit(Y_AXIS))) { serial_write('Y'); }
-        if (bit_istrue(lim_pin_state,bit(Z_AXIS))) { serial_write('Z'); }
-      }
-      if (ctrl_pin_state) {
-        #ifdef ENABLE_SAFETY_DOOR_INPUT_PIN
-          if (bit_istrue(ctrl_pin_state,CONTROL_PIN_INDEX_SAFETY_DOOR)) { serial_write('D'); }
-        #endif
-        if (bit_istrue(ctrl_pin_state,CONTROL_PIN_INDEX_RESET)) { serial_write('R'); }
-        if (bit_istrue(ctrl_pin_state,CONTROL_PIN_INDEX_FEED_HOLD)) { serial_write('H'); }
-        if (bit_istrue(ctrl_pin_state,CONTROL_PIN_INDEX_CYCLE_START)) { serial_write('S'); }
-      }
-    }
+	// Report realtime feed speed
+	#ifdef REPORT_FIELD_CURRENT_FEED_SPEED
+		printPgmString(PSTR("|FS:"));
+/// +Q  : TO REVIEW  ...
+		printFloat_RateValue(st_get_realtime_rate(), LINEAR);
+///
+		serial_write(',');
+		printFloat(sys.spindle_speed,N_DECIMAL_RPMVALUE);
+	#endif
+
+	#ifdef REPORT_FIELD_PIN_STATE
+		uint8_t lim_pin_state = limits_get_state();
+		uint8_t ctrl_pin_state = system_control_get_state();
+		uint8_t prb_pin_state = probe_get_state();
+		if (lim_pin_state | ctrl_pin_state | prb_pin_state) {
+			printPgmString(PSTR("|Pn:"));
+			if (prb_pin_state)
+				{ serial_write('P'); }
+			if (lim_pin_state) {
+				if (bit_istrue(lim_pin_state,bit(X_AXIS))) { serial_write('X'); }
+				if (bit_istrue(lim_pin_state,bit(Y_AXIS))) { serial_write('Y'); }
+				if (bit_istrue(lim_pin_state,bit(Z_AXIS))) { serial_write('Z'); }
+	/// +Q
+			#if (AXIS_Q > 0) && defined(AXIS_Q_EXIST)
+				if (bit_istrue(lim_pin_state,bit(Q_AXIS))) { serial_write(
+				#if AXIS_Q == AXIS_A
+					'A'
+				#elif  AXIS_Q == AXIS_B
+					'B'
+				#elif  AXIS_Q == AXIS_C
+					'C'
+				#elif  AXIS_Q == AXIS_U
+					'U'
+				#elif  AXIS_Q == AXIS_V
+					'V'
+				#elif  AXIS_Q == AXIS_W
+					'W'
+				#endif
+					); }
+			#endif
+///
+			}
+			if (ctrl_pin_state) {
+				#ifdef ENABLE_SAFETY_DOOR_INPUT_PIN
+					if (bit_istrue(ctrl_pin_state,CONTROL_PIN_INDEX_SAFETY_DOOR))
+						{ serial_write('D'); }
+				#endif
+				if (bit_istrue(ctrl_pin_state,CONTROL_PIN_INDEX_RESET)) { serial_write('R'); }
+				if (bit_istrue(ctrl_pin_state,CONTROL_PIN_INDEX_FEED_HOLD)) { serial_write('H'); }
+				if (bit_istrue(ctrl_pin_state,CONTROL_PIN_INDEX_CYCLE_START)) { serial_write('S'); }
+			}
+		}
   #endif
 
   #ifdef REPORT_FIELD_WORK_COORD_OFFSET
     if (sys.report_wco_counter > 0) { sys.report_wco_counter--; }
     else {
       if (sys.state & (STATE_HOMING | STATE_CYCLE | STATE_HOLD | STATE_JOG | STATE_SAFETY_DOOR)) {
-        sys.report_wco_counter = (REPORT_WCO_REFRESH_BUSY_COUNT-1); // Reset counter for slow refresh
+		sys.report_wco_counter = (REPORT_WCO_REFRESH_BUSY_COUNT-1); // Reset counter for slow refresh
       } else { sys.report_wco_counter = (REPORT_WCO_REFRESH_IDLE_COUNT-1); }
       if (sys.report_ovr_counter == 0) { sys.report_ovr_counter = 1; } // Set override on next report.
       printPgmString(PSTR("|WCO:"));
@@ -545,31 +621,31 @@ void report_realtime_status()
   #endif
 
   #ifdef REPORT_FIELD_OVERRIDES
-    if (sys.report_ovr_counter > 0) { sys.report_ovr_counter--; }
-    else {
-      if (sys.state & (STATE_HOMING | STATE_CYCLE | STATE_HOLD | STATE_JOG | STATE_SAFETY_DOOR)) {
-        sys.report_ovr_counter = (REPORT_OVR_REFRESH_BUSY_COUNT-1); // Reset counter for slow refresh
-      } else { sys.report_ovr_counter = (REPORT_OVR_REFRESH_IDLE_COUNT-1); }
-      printPgmString(PSTR("|Ov:"));
-      print_uint8_base10(sys.f_override);
-      serial_write(',');
-      print_uint8_base10(sys.r_override);
-      serial_write(',');
-      print_uint8_base10(sys.spindle_speed_ovr);
+		if (sys.report_ovr_counter > 0) { sys.report_ovr_counter--; }
+		else {
+		  if (sys.state & (STATE_HOMING | STATE_CYCLE | STATE_HOLD | STATE_JOG | STATE_SAFETY_DOOR)) {
+			sys.report_ovr_counter = (REPORT_OVR_REFRESH_BUSY_COUNT-1); // Reset counter for slow refresh
+		  } else { sys.report_ovr_counter = (REPORT_OVR_REFRESH_IDLE_COUNT-1); }
+		  printPgmString(PSTR("|Ov:"));
+		  print_uint8_base10(sys.f_override);
+		  serial_write(',');
+		  print_uint8_base10(sys.r_override);
+		  serial_write(',');
+		  print_uint8_base10(sys.spindle_speed_ovr);
 
-      uint8_t sp_state = spindle_get_state();
-      uint8_t cl_state = coolant_get_state();
-      if (sp_state || cl_state) {
-        printPgmString(PSTR("|A:"));
-        if (sp_state) { // != SPINDLE_STATE_DISABLE
-          if (sp_state == SPINDLE_STATE_CW) { serial_write('S'); } // CW
-          else { serial_write('C'); } // CCW
-        }
-        if (cl_state & COOLANT_STATE_FLOOD) { serial_write('F'); }
-        if (cl_state & COOLANT_STATE_MIST) { serial_write('M'); }
-      }  
-    }
-  #endif
+		  uint8_t sp_state = spindle_get_state();
+		  uint8_t cl_state = coolant_get_state();
+		  if (sp_state || cl_state) {
+			printPgmString(PSTR("|A:"));
+			if (sp_state) { // != SPINDLE_STATE_DISABLE
+			  if (sp_state == SPINDLE_STATE_CW) { serial_write('S'); } // CW
+			  else { serial_write('C'); } // CCW
+			}
+			if (cl_state & COOLANT_STATE_FLOOD) { serial_write('F'); }
+			if (cl_state & COOLANT_STATE_MIST) { serial_write('M'); }
+		  }
+		}
+	#endif
 
   serial_write('>');
   report_util_line_feed();

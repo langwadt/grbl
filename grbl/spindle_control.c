@@ -67,7 +67,6 @@ void spindle_stop()
   #endif
 }
 
-
 // Sets spindle speed PWM output and enable pin, if configured. Called by spindle_set_state()
 // and stepper ISR. Keep routine small and efficient.
 void spindle_set_speed(uint16_t pwm_value)

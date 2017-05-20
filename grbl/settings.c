@@ -1,5 +1,5 @@
 /*
-  settings.c - eeprom configuration handling 
+  settings.c - eeprom configuration handling
   Part of Grbl
 
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
@@ -28,7 +28,7 @@ settings_t settings;
 void settings_store_startup_line(uint8_t n, char *line)
 {
   #ifdef FORCE_BUFFER_SYNC_DURING_EEPROM_WRITE
-    protocol_buffer_synchronize(); // A startup line may contain a motion and be executing. 
+    protocol_buffer_synchronize(); // A startup line may contain a motion and be executing.
   #endif
   uint32_t addr = n*(LINE_BUFFER_SIZE+1)+EEPROM_ADDR_STARTUP_BLOCK;
   memcpy_to_eeprom_with_checksum(addr,(char*)line, LINE_BUFFER_SIZE);
@@ -50,8 +50,18 @@ void settings_write_coord_data(uint8_t coord_select, float *coord_data)
   #ifdef FORCE_BUFFER_SYNC_DURING_EEPROM_WRITE
     protocol_buffer_synchronize();
   #endif
+/// +Q
+/*
+  uint32_t size_select, size_eeprom;
+  size_select = (sizeof(float)*N_AXIS+1);
+  size_eeprom = (sizeof(float)*N_AXIS);
+  uint32_t addr = coord_select*(size_select) + EEPROM_ADDR_PARAMETERS;
+  memcpy_to_eeprom_with_checksum(addr,(char*)coord_data, size_eeprom);
+ */
+///
   uint32_t addr = coord_select*(sizeof(float)*N_AXIS+1) + EEPROM_ADDR_PARAMETERS;
   memcpy_to_eeprom_with_checksum(addr,(char*)coord_data, sizeof(float)*N_AXIS);
+
 }
 
 
@@ -94,9 +104,9 @@ void settings_restore(uint8_t restore_flag) {
     if (DEFAULT_INVERT_LIMIT_PINS) { settings.flags |= BITFLAG_INVERT_LIMIT_PINS; }
     if (DEFAULT_INVERT_PROBE_PIN) { settings.flags |= BITFLAG_INVERT_PROBE_PIN; }
 
-    settings.steps_per_mm[X_AXIS] = DEFAULT_X_STEPS_PER_MM;
-    settings.steps_per_mm[Y_AXIS] = DEFAULT_Y_STEPS_PER_MM;
-    settings.steps_per_mm[Z_AXIS] = DEFAULT_Z_STEPS_PER_MM;
+    settings.steps_per_unit[X_AXIS] = DEFAULT_X_STEPS_PER_MM;
+    settings.steps_per_unit[Y_AXIS] = DEFAULT_Y_STEPS_PER_MM;
+    settings.steps_per_unit[Z_AXIS] = DEFAULT_Z_STEPS_PER_MM;
     settings.max_rate[X_AXIS] = DEFAULT_X_MAX_RATE;
     settings.max_rate[Y_AXIS] = DEFAULT_Y_MAX_RATE;
     settings.max_rate[Z_AXIS] = DEFAULT_Z_MAX_RATE;
@@ -106,7 +116,19 @@ void settings_restore(uint8_t restore_flag) {
     settings.max_travel[X_AXIS] = (-DEFAULT_X_MAX_TRAVEL);
     settings.max_travel[Y_AXIS] = (-DEFAULT_Y_MAX_TRAVEL);
     settings.max_travel[Z_AXIS] = (-DEFAULT_Z_MAX_TRAVEL);
-
+/// +Q  // fourth axis, always Q_AXIS == 3
+#ifdef AXIS_Q_EXIST
+  #if AXIS_Q_TYPE == LINEAR
+    settings.steps_per_unit[Q_AXIS] = DEFAULT_Q_STEPS_PER_MM;
+  #elif AXIS_Q_TYPE == ROTARY
+    settings.steps_per_unit[Q_AXIS] = DEFAULT_Q_STEPS_PER_DEGREE;
+  #endif
+/// TODO rate -> °/mn ?
+    settings.max_rate[Q_AXIS] = 	DEFAULT_Q_MAX_RATE;
+    settings.acceleration[Q_AXIS] = DEFAULT_Q_ACCELERATION;
+    settings.max_travel[Q_AXIS] = (-DEFAULT_Q_MAX_TRAVEL);
+#endif
+///
     write_global_settings();
   }
 
@@ -165,14 +187,24 @@ uint8_t settings_read_build_info(char *line)
 // Read selected coordinate data from EEPROM. Updates pointed coord_data value.
 uint8_t settings_read_coord_data(uint8_t coord_select, float *coord_data)
 {
+/// +Q
+/*
+	uint32_t size_select, size_eeprom;
+    size_select = (sizeof(float)*N_AXIS+1);
+	size_eeprom = (sizeof(float)*N_AXIS);
+    uint32_t addr = coord_select*size_select + EEPROM_ADDR_PARAMETERS;
+	if (!(memcpy_from_eeprom_with_checksum((char*)coord_data, addr, size_eeprom))) {
+///
+*/
   uint32_t addr = coord_select*(sizeof(float)*N_AXIS+1) + EEPROM_ADDR_PARAMETERS;
   if (!(memcpy_from_eeprom_with_checksum((char*)coord_data, addr, sizeof(float)*N_AXIS))) {
-    // Reset with default zero vector
-    clear_vector_float(coord_data);
-    settings_write_coord_data(coord_select,coord_data);
-    return(false);
-  }
-  return(true);
+		// Reset with default zero vector
+		clear_vector_float(coord_data);
+		settings_write_coord_data(coord_select,coord_data);
+		return(false);
+	}
+
+	return(true);
 }
 
 
@@ -208,11 +240,11 @@ uint8_t settings_store_global_setting(uint8_t parameter, float value) {
             #ifdef MAX_STEP_RATE_HZ
               if (value*settings.max_rate[parameter] > (MAX_STEP_RATE_HZ*60.0)) { return(STATUS_MAX_STEP_RATE_EXCEEDED); }
             #endif
-            settings.steps_per_mm[parameter] = value;
+            settings.steps_per_unit[parameter] = value;
             break;
           case 1:
             #ifdef MAX_STEP_RATE_HZ
-              if (value*settings.steps_per_mm[parameter] > (MAX_STEP_RATE_HZ*60.0)) {  return(STATUS_MAX_STEP_RATE_EXCEEDED); }
+              if (value*settings.steps_per_unit[parameter] > (MAX_STEP_RATE_HZ*60.0)) {  return(STATUS_MAX_STEP_RATE_EXCEEDED); }
             #endif
             settings.max_rate[parameter] = value;
             break;
@@ -315,25 +347,40 @@ void settings_init() {
 // Returns step pin mask according to Grbl internal axis indexing.
 uint8_t get_step_pin_mask(uint8_t axis_idx)
 {
-  if ( axis_idx == X_AXIS ) { return((1<<X_STEP_BIT)); }
-  if ( axis_idx == Y_AXIS ) { return((1<<Y_STEP_BIT)); }
-  return((1<<Z_STEP_BIT));
+	if ( axis_idx == X_AXIS ) { return((1<<X_STEP_BIT)); }
+	if ( axis_idx == Y_AXIS ) { return((1<<Y_STEP_BIT)); }
+/// +Q
+#ifdef AXIS_Q_EXIST
+	if ( axis_idx == Q_AXIS ) { return((1<<Q_STEP_BIT));}
+#endif
+///
+	return((1<<Z_STEP_BIT));
 }
 
 
 // Returns direction pin mask according to Grbl internal axis indexing.
 uint8_t get_direction_pin_mask(uint8_t axis_idx)
 {
-  if ( axis_idx == X_AXIS ) { return((1<<X_DIRECTION_BIT)); }
-  if ( axis_idx == Y_AXIS ) { return((1<<Y_DIRECTION_BIT)); }
-  return((1<<Z_DIRECTION_BIT));
+	if ( axis_idx == X_AXIS ) { return((1<<X_DIRECTION_BIT)); }
+	if ( axis_idx == Y_AXIS ) { return((1<<Y_DIRECTION_BIT)); }
+/// +Q
+#ifdef AXIS_Q_EXIST
+	if ( axis_idx == Q_AXIS ) {return((1<<Q_DIRECTION_BIT));}
+#endif
+///
+	return((1<<Z_DIRECTION_BIT));
 }
 
 
 // Returns limit pin mask according to Grbl internal axis indexing.
 uint8_t get_limit_pin_mask(uint8_t axis_idx)
 {
-  if ( axis_idx == X_AXIS ) { return((1<<X_LIMIT_BIT)); }
-  if ( axis_idx == Y_AXIS ) { return((1<<Y_LIMIT_BIT)); }
-  return((1<<Z_LIMIT_BIT));
+	if ( axis_idx == X_AXIS ) { return((1<<X_LIMIT_BIT)); }
+	if ( axis_idx == Y_AXIS ) { return((1<<Y_LIMIT_BIT)); }
+/// +Q
+#ifdef AXIS_Q_EXIST
+	if ( axis_idx == Q_AXIS ) {return((1<<Q_LIMIT_BIT));}
+#endif
+///
+	return((1<<Z_LIMIT_BIT));
 }
