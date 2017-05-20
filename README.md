@@ -7,7 +7,7 @@
 First of all I would like to thank those who allowed me to start this project:
 
 - ***Chamnit***: who is the current developer of Grbl
-- **Electrokean**: who started a 6-axis project [https://github.com/electrokean/grbl/tree/6-AXIS](https://github.com/electrokean/grbl/tree/6-AXIS "6-axes")
+- ***Electrokean***: who started a 6-axis project [https://github.com/electrokean/grbl/tree/6-AXIS](https://github.com/electrokean/grbl/tree/6-AXIS "6-axes")
 - ***dguerizec***: who recently started an identical job [https://github.com/dguerizec/grbl-Mega-4axis](https://github.com/dguerizec/grbl-Mega-4axis "4-axes") and made me want to take back an old version 4 axes based on Grbl 0.8
 
 
